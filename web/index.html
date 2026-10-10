@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgriVoice NAIC 2026</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0fdf4; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #15803d; text-align: center; }
+        .record-btn { display: block; width: 100%; padding: 15px; background-color: #22c55e; color: white; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; transition: 0.3s; }
+        .record-btn:hover { background-color: #16a34a; }
+        .record-btn.recording { background-color: #ef4444; animation: pulse 1.5s infinite; }
+        .output-box { margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .hidden { display: none; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 AgriVoice</h1>
+        <p style="text-align:center; color: #475569;">Voice-First Agricultural Advisor (Hausa, Yoruba, Igbo, English)</p>
+        
+        <button id="recordBtn" class="record-btn">🎤 Tap to Record Question</button>
+        
+        <div id="loading" class="hidden" style="text-align: center; margin-top: 20px;">
+            <p>Processing your voice... please wait</p>
+        </div>
+
+        <div id="result" class="output-box hidden">
+            <h3>Transcript (<span id="lang"></span>)</h3>
+            <p id="transcript"></p>
+            
+            <h3>Advice</h3>
+            <p id="advice"></p>
+            
+            <h3>Voice Output</h3>
+            <audio id="audioOutput" controls></audio>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        const recordBtn = document.getElementById('recordBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+
+        recordBtn.addEventListener('click', async () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                recordBtn.textContent = '🎤 Tap to Record Question';
+                recordBtn.classList.remove('recording');
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    audioChunks = [];
+                    
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob, 'question.wav');
+                    
+                    loading.classList.remove('hidden');
+                    result.classList.add('hidden');
+                    
+                    try {
+                        const response = await fetch('/api/chat', { method: 'POST', body: formData });
+                        const data = await response.json();
+                        
+                        document.getElementById('transcript').textContent = data.transcript;
+                        document.getElementById('lang').textContent = data.language;
+                        document.getElementById('advice').textContent = data.advice;
+                        if (data.audio_url) {
+                            document.getElementById('audioOutput').src = data.audio_url;
+                        }
+                        
+                        loading.classList.add('hidden');
+                        result.classList.remove('hidden');
+                    } catch (e) {
+                        alert('Error processing request');
+                        loading.classList.add('hidden');
+                    }
+                };
+
+                mediaRecorder.start();
+                recordBtn.textContent = '⏹ Stop Recording';
+                recordBtn.classList.add('recording');
+            } catch (err) {
+                alert('Microphone access denied or error occurred.');
+            }
+        });
+    </script>
+</body>
+</html>
