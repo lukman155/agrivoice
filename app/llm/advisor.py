@@ -53,7 +53,11 @@ class AgriculturalAdvisor:
             ]
         }
         try:
-            response = requests.post(url, json=data, timeout=120)
+            headers = {
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "1"
+            }
+            response = requests.post(url, json=data, headers=headers, timeout=120, verify=False)
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]
         except Exception as e:
