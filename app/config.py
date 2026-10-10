@@ -17,9 +17,12 @@ class Settings(BaseSettings):
     knowledge_dir: str = "data/knowledge"
     embedding_model: str = "all-MiniLM-L6-v2"
     
-    # LLM Backend
-    llm_backend: str = os.getenv("LLM_BACKEND", "ollama")  # 'transformers' or 'ollama'
+    # LLM Backend: 'ollama', 'transformers', or 'api' (remote N-ATLAS server)
+    llm_backend: str = os.getenv("LLM_BACKEND", "ollama")
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    
+    # Remote API backend (for Colab/Kaggle deployment)
+    natlas_api_url: str = os.getenv("NATLAS_API_URL", "")  # e.g. https://xxxx.ngrok-free.app
     
     # WhatsApp
     whatsapp_verify_token: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "agrivoice_secret_token")
