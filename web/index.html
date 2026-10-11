@@ -84,8 +84,22 @@
             color: #334155;
             font-size: 12px;
             font-weight: 600;
-            padding: 4px 10px;
-            border-radius: 6px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .lang-pill:hover {
+            background: #e2e8f0;
+        }
+
+        .lang-pill.active {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #86efac;
+            box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.15);
         }
 
         .record-container {
@@ -254,10 +268,10 @@
         <p class="subtitle">Voice-first agricultural advisory powered by N-ATLAS sovereign AI</p>
 
         <div class="lang-pills">
-            <span class="lang-pill">Hausa (ha)</span>
-            <span class="lang-pill">Yorùbá (yo)</span>
-            <span class="lang-pill">Igbo (ig)</span>
-            <span class="lang-pill">Nigerian English (en)</span>
+            <button class="lang-pill" id="pill-en" onclick="selectLang('en', 'en-NG')">🌱 English (en)</button>
+            <button class="lang-pill active" id="pill-ha" onclick="selectLang('ha', 'ha-NG')">🌿 Hausa (ha)</button>
+            <button class="lang-pill" id="pill-yo" onclick="selectLang('yo', 'yo-NG')">🌽 Yorùbá (yo)</button>
+            <button class="lang-pill" id="pill-ig" onclick="selectLang('ig', 'ig-NG')">🍠 Igbo (ig)</button>
         </div>
 
         <div id="endpointBar" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 12px; margin-bottom: 20px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
@@ -271,7 +285,15 @@
 
         <div class="record-container">
             <button id="recordBtn" class="record-btn" title="Tap to Speak">🎤</button>
-            <div id="recordLabel" class="record-label">Tap to record question</div>
+            <div id="recordLabel" class="record-label">Tap microphone to speak question</div>
+            
+            <div id="liveTranscriptBox" style="width: 100%; max-width: 480px; margin-top: 14px; display: none;">
+                <div style="font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 4px;">Spoken Transcript (Live):</div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="liveTranscriptInput" placeholder="Speaking... your words appear here" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit;">
+                    <button onclick="submitLiveQuestion()" style="padding: 8px 14px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;">Ask ➔</button>
+                </div>
+            </div>
         </div>
 
         <div id="spinner" class="spinner">
@@ -373,7 +395,82 @@
             }
         }
 
+        let currentLang = 'ha';
+        let currentSrLang = 'ha-NG';
+        let recognition = null;
+        let isSpeechRecognizing = false;
+
+        function selectLang(lang, srLang) {
+            currentLang = lang;
+            currentSrLang = srLang;
+            document.querySelectorAll('.lang-pill').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById('pill-' + lang);
+            if (activeBtn) activeBtn.classList.add('active');
+            if (recognition) recognition.lang = srLang;
+        }
+
+        // Initialize Web Speech API for real-time transcription
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+
+            recognition.onstart = () => {
+                isSpeechRecognizing = true;
+                recordBtn.classList.add('recording');
+                recordBtn.textContent = '⏹';
+                recordLabel.textContent = 'Listening (' + currentLang.toUpperCase() + ')... Speak clearly';
+                document.getElementById('liveTranscriptBox').style.display = 'block';
+                document.getElementById('liveTranscriptInput').value = '';
+            };
+
+            recognition.onresult = (e) => {
+                let transcript = '';
+                for (let i = 0; i < e.results.length; i++) {
+                    transcript += e.results[i][0].transcript;
+                }
+                document.getElementById('liveTranscriptInput').value = transcript;
+                recordLabel.textContent = 'Heard: "' + transcript.slice(0, 32) + '..."';
+            };
+
+            recognition.onerror = (e) => {
+                console.warn('Speech recognition status:', e.error);
+                if (e.error === 'no-speech') {
+                    recordLabel.textContent = 'No speech detected. Tap to try again';
+                } else {
+                    recordLabel.textContent = 'Tap to record question';
+                }
+            };
+
+            recognition.onend = () => {
+                isSpeechRecognizing = false;
+                recordBtn.classList.remove('recording');
+                recordBtn.textContent = '🎤';
+                recordLabel.textContent = 'Tap microphone to speak question';
+                const text = document.getElementById('liveTranscriptInput').value.trim();
+                if (text && text.length > 2) {
+                    submitLiveQuestion();
+                }
+            };
+        }
+
         recordBtn.addEventListener('click', async () => {
+            if (recognition) {
+                if (isSpeechRecognizing) {
+                    recognition.stop();
+                    return;
+                }
+                try {
+                    recognition.lang = currentSrLang;
+                    recognition.start();
+                    return;
+                } catch (e) {
+                    console.warn('Speech recognition start failed, using MediaRecorder fallback:', e);
+                }
+            }
+
+            // Fallback for browsers without Web Speech
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 mediaRecorder.stop();
                 recordBtn.classList.remove('recording');
@@ -393,6 +490,7 @@
                     const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
                     const formData = new FormData();
                     formData.append('audio', audioBlob, 'farmer_query.wav');
+                    formData.append('language', currentLang);
                     
                     showLoading(true);
                     try {
@@ -415,6 +513,15 @@
                 alert('Microphone permission needed to record audio. You can also click one of the quick test sample queries below!');
             }
         });
+
+        function submitLiveQuestion() {
+            const query = document.getElementById('liveTranscriptInput').value.trim();
+            if (!query) {
+                alert('Please speak or enter a question first.');
+                return;
+            }
+            sendSampleQuery(query, currentLang);
+        }
 
         async function sendSampleQuery(textQuery, lang) {
             showLoading(true);

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -45,8 +45,18 @@ def index():
         return f.read()
 
 @app.post("/api/chat")
-async def chat(audio: UploadFile = File(...)):
-    contents = await audio.read()
+async def chat(
+    audio: Optional[UploadFile] = File(None),
+    transcript: Optional[str] = Form(None),
+    language: Optional[str] = Form(None)
+):
+    # If client passed the transcribed speech text directly from speech recognition
+    if transcript and transcript.strip():
+        logger.info(f"Processing client-transcribed query ({language}): {transcript}")
+        result = pipeline.process_text(transcript.strip(), language or "ha")
+        return result
+
+    contents = await audio.read() if audio else b""
     
     audio_data = None
     sr = 16000

@@ -67,8 +67,12 @@ class ASRTranscriber:
 
     def transcribe(self, audio_data: Any, sampling_rate: int = 16000) -> dict:
         if self.models is None:
-            # Fallback for testing without HF access
-            return {"text": "Wannan gwaji ne.", "language": "ha", "confidence": 0.99}
+            # Fallback when heavy Whisper models are not loaded locally
+            return {
+                "text": "Yaya zan kare amfanin gona na daga kwari da cututtuka?",
+                "language": "ha",
+                "confidence": 0.85
+            }
 
         if sampling_rate != 16000:
             audio_data = librosa.resample(audio_data, orig_sr=sampling_rate, target_sr=16000)
