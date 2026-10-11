@@ -125,8 +125,7 @@ class KnowledgeRetriever:
         scored.sort(key=lambda x: x[0], reverse=True)
         top_chunks = [item[1] for item in scored[:top_k]]
         
-        if not top_chunks and self.documents:
-            # Fallback to first general guide
-            top_chunks = [self.documents[0]["text"]]
+        if not top_chunks:
+            return ""
 
         return "\n\n".join(top_chunks)

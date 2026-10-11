@@ -65,7 +65,7 @@ class AgriculturalAdvisor:
                     "User-Agent": "AgriVoice-Sovereign/1.0"
                 }
                 logger.info(f"Dispatching query to live N-ATLAS GPU: {url}")
-                response = requests.post(url, json=data, headers=headers, timeout=30, verify=False)
+                response = requests.post(url, json=data, headers=headers, timeout=(3.0, 25.0), verify=False)
                 if response.status_code == 200:
                     content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content and "[API Backend Error" not in content and "[Inference error" not in content:
@@ -79,11 +79,46 @@ class AgriculturalAdvisor:
         return self._synthesize_grounded_advice(query, context, lang)
 
     def _synthesize_grounded_advice(self, query: str, context: str, lang: str) -> str:
-        """Synthesize verified agronomic advice from retrieved IITA/NAERLS knowledge."""
+        """Synthesize verified agronomic advice or helpful introduction from sovereign engine."""
+        q_lower = query.lower().strip()
+        
+        # 1. Handle Greetings & Identity Questions
+        greeting_keywords = [
+            "name", "who are you", "who made you", "who created you", "what are you", "what can you do", "what do you do",
+            "hello", "hi", "hey", "good morning", "good afternoon", "good evening", "how are you", "help",
+            # Hausa
+            "sannu", "ina kwana", "ina wuni", "waye kai", "sunanka", "taimako",
+            # Yoruba
+            "bawo", "e nle", "ẹ n lẹ", "e kaaro", "ẹ kaarọ", "e kaasan", "ẹ kaasan", "ta ni ẹ", "oruko re", "orukọ rẹ", "iranlowo", "ìrànlọ́wọ́",
+            # Igbo
+            "kedu", "ndewo", "ututu oma", "ụtụtụ ọma", "onye ka i bu", "aha gi", "aha gị", "enyemaka"
+        ]
+        is_greeting = any(w in q_lower for w in greeting_keywords)
+        if is_greeting:
+            if lang == "ha":
+                return "Sannu! Ni ne AgriVoice, masanin nomanka na Najeriya wanda N-ATLAS ke taimakawa. Ina bayar da shawarwari kan sarrafa amfanin gona, magance kwari, da inganta kasa. Ta yaya zan iya taimaka maka da gonarka a yau?"
+            elif lang == "yo":
+                return "Ẹ n lẹ o! Emi ni AgriVoice, amọran ogbin Naijiria ti N-ATLAS n ṣe atilẹyin. Mo wa nibi lati ran ọ lọwọ pẹlu itọju irugbin, iṣakoso kokoro, ati didara ile oko rẹ. Bawo ni mo ṣe le ran ọ lọwọ loni?"
+            elif lang == "ig":
+                return "Ndewo! Abụ m AgriVoice, ọkachamara ọrụ ugbo Naịjirịa gị nke N-ATLAS na-akwado. Enwere m ike inyere gị aka n'ịkọ ihe ubi, nlekọta ala, na nchịkwa ụmụ ahụhụ. Kedu ka m ga-esi nyere gị aka taa?"
+            else:
+                return "Hello! I am AgriVoice, your sovereign Nigerian agricultural advisor powered by N-ATLAS (Llama-3 8B). I provide expert farming advice on crop management, pest control, soil health, and market prices across Nigeria. How can I help with your farm today?"
+
+        # 2. General advice when no specific crop context matched
+        if not context or not context.strip():
+            if lang == "ha":
+                return "Bisa ga ka'idojin aikin gona na Najeriya (IITA/NAERLS):\nKoyaushe ka zabi ingantaccen irin shuka, ka gwada lafiyar kasa, kuma ka yi amfani da takin zamani a kan lokaci. Tuntubi ofishin ADP na jiharka don karin bayani."
+            elif lang == "yo":
+                return "Gẹgẹbi itọsọna iṣẹ-ogbin Naijiria (IITA/NAERLS):\nNigbagbogbo lo awọn irugbin ti o ni ilera to dara, ṣe idanwo ile rẹ, ki o si lo ajile to peye ni akoko ti o tọ. Kan si ọfiisi ADP ti ipinlẹ rẹ fun alaye siwaju sii."
+            elif lang == "ig":
+                return "Dabere na nduzi oru ugbo Naịjirịa (IITA/NAERLS):\nHụ na ị na-eji mkpụrụ osisi kwesịrị ekwesị, na-elekọta ala gị, ma na-eji nri ala na-edozi ahụ eme ihe n'oge. Kpọtụrụ ụlọ ọrụ ADP mpaghara gị maka nduzi ọzọ."
+            else:
+                return "According to Nigerian agricultural extension guidelines (IITA/NAERLS):\nAlways plant certified disease-free seeds, maintain proper soil fertility, and apply balanced fertilizer on schedule. Contact your local ADP extension office for regional guidance."
+
+        # 3. Contextual agronomic response
         lines = [line.strip().lstrip('-*# ') for line in context.split('\n') if line.strip() and not line.startswith('#')]
         bullets = [l for l in lines if len(l) > 15][:2]
         clean_context = ". ".join(bullets) if bullets else context[:180]
-        # Clean any markdown asterisks
         clean_context = clean_context.replace("**", "").replace("*", "")
 
         if lang == "ha":
