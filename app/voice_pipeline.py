@@ -15,6 +15,32 @@ class VoicePipeline:
         self.advisor = AgriculturalAdvisor()
         self.speaker = TTSSpeaker()
 
+    def process_audio_bytes(self, wav_bytes: bytes, language: str = "en") -> dict:
+        """
+        Process incoming WAV bytes: ASR -> RAG -> LLM -> TTS
+        """
+        logger.info(f"Processing audio bytes ({language}), size: {len(wav_bytes)} bytes")
+        transcription_result = self.transcriber.transcribe_wav(wav_bytes, language=language)
+        text = transcription_result.get("text", "").strip()
+        detected_lang = transcription_result.get("language", language)
+        
+        if not text:
+            fallback_msgs = {
+                "en": "We could not clearly hear your audio. Please speak clearly into the microphone or click a sample query.",
+                "ha": "Ba mu ji tambayarku sosai ba. Da fatan za a sake magana a fili ko a danna misalan tambayoyi.",
+                "yo": "A ko gbọ ibeere rẹ kedere. Jọwọ sọrọ si gbohungbohun lẹẹkansi tabi tẹ apẹẹrẹ ibeere.",
+                "ig": "Anyị anụghị ajụjụ gị nke ọma. Biko kwuo okwu nke ọma ọzọ ma ọ bụ pịa ajụjụ nlele."
+            }
+            return {
+                "transcript": "(Unclear or silent audio)",
+                "language": detected_lang,
+                "advice": fallback_msgs.get(detected_lang, fallback_msgs["en"]),
+                "source": "AgriVoice Audio Monitor",
+                "audio_url": None
+            }
+            
+        return self.process_text(text, language=detected_lang)
+
     def process_audio(self, audio_data, sampling_rate=16000) -> dict:
         """
         Process incoming audio: ASR -> RAG -> LLM -> TTS

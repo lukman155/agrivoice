@@ -50,36 +50,23 @@ async def chat(
     transcript: Optional[str] = Form(None),
     language: Optional[str] = Form(None)
 ):
+    target_lang = (language or "en").strip()
     # If client passed the transcribed speech text directly from speech recognition
     if transcript and transcript.strip():
-        logger.info(f"Processing client-transcribed query ({language}): {transcript}")
-        result = pipeline.process_text(transcript.strip(), language or "ha")
-        return result
+        logger.info(f"Processing client-transcribed query ({target_lang}): {transcript}")
+        return pipeline.process_text(transcript.strip(), target_lang)
 
     contents = await audio.read() if audio else b""
-    
-    audio_data = None
-    sr = 16000
-    
-    if HAVE_LIBROSA:
-        try:
-            audio_data, sr = librosa.load(io.BytesIO(contents), sr=16000)
-        except Exception as e:
-            logger.warning(f"Librosa load failed: {e}. Falling back to standard wave reader.")
+    if contents:
+        return pipeline.process_audio_bytes(contents, language=target_lang)
 
-    if audio_data is None:
-        try:
-            with wave.open(io.BytesIO(contents), "rb") as wf:
-                sr = wf.getframerate()
-                n_frames = wf.getnframes()
-                raw = wf.readframes(n_frames)
-                audio_data = list(raw[:min(len(raw), 32000)])
-        except Exception:
-            # Fallback dummy buffer for silent/unsupported chunks
-            audio_data = [0.0] * 16000
-
-    result = pipeline.process_audio(audio_data, sr)
-    return result
+    return {
+        "transcript": "",
+        "language": target_lang,
+        "advice": "No audio data received. Please record your question.",
+        "source": "AgriVoice Monitor",
+        "audio_url": None
+    }
 
 @app.post("/api/chat-text")
 async def chat_text(req: TextChatRequest):
