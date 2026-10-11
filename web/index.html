@@ -287,12 +287,18 @@
             <button id="recordBtn" class="record-btn" title="Tap to Speak">🎤</button>
             <div id="recordLabel" class="record-label">Tap microphone to speak question</div>
             
-            <div id="liveTranscriptBox" style="width: 100%; max-width: 480px; margin-top: 14px; display: none;">
-                <div style="font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 4px;">Spoken Transcript (Live):</div>
+            <div id="liveTranscriptBox" style="width: 100%; max-width: 520px; margin-top: 14px;">
                 <div style="display: flex; gap: 8px;">
-                    <input type="text" id="liveTranscriptInput" placeholder="Speaking... your words appear here" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit;">
-                    <button onclick="submitLiveQuestion()" style="padding: 8px 14px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;">Ask ➔</button>
+                    <input type="text" id="liveTranscriptInput" placeholder="Speak into mic, upload voice note, or type question..." style="flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit;">
+                    <button onclick="submitLiveQuestion()" style="padding: 10px 16px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;">Ask GPU ➔</button>
                 </div>
+            </div>
+            
+            <input type="file" id="audioFileInput" accept="audio/*" style="display: none;" onchange="handleAudioUpload(this)">
+            <div style="margin-top: 10px;">
+                <button onclick="document.getElementById('audioFileInput').click()" style="background: #f1f5f9; border: 1px dashed #94a3b8; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; color: #334155; cursor: pointer;">
+                    📁 Or Upload Audio / WhatsApp Voice Note (.wav, .mp3, .ogg)
+                </button>
             </div>
         </div>
 
@@ -301,19 +307,19 @@
         </div>
 
         <div class="samples-section">
-            <div class="samples-title">Or Try A Pre-Recorded Farmer Query</div>
+            <div class="samples-title">Or Try A Verified Farmer Voice Query</div>
             <div class="samples-grid">
-                <button class="sample-btn" onclick="sendSampleQuery('Yaya zan magance cutar rogo da ke busar da ganyaye?', 'ha')">
-                    🌿 <b>Hausa</b><br>Cassava Blight
+                <button class="sample-btn" onclick="sendSampleQuery('Yaya zan magance cutar rogo da ke busar da ganyaye?', 'ha', '/static/samples/ha_cassava.mp3')">
+                    🌿 <b>Hausa</b><br>Cassava Blight 🔊
                 </button>
-                <button class="sample-btn" onclick="sendSampleQuery('Kini itoju to ye fun kokoro to n ba agbado je?', 'yo')">
-                    🌽 <b>Yorùbá</b><br>Maize Pests
+                <button class="sample-btn" onclick="sendSampleQuery('Kini itoju to ye fun kokoro to n ba agbado je?', 'yo', '/static/samples/yo_maize.mp3')">
+                    🌽 <b>Yorùbá</b><br>Maize Pests 🔊
                 </button>
-                <button class="sample-btn" onclick="sendSampleQuery('Kedu ka m ga-esi chekwaa ji n\'oba ka o ghara ire ure?', 'ig')">
-                    🍠 <b>Igbo</b><br>Yam Storage
+                <button class="sample-btn" onclick="sendSampleQuery('Kedu ka m ga-esi chekwaa ji n\'oba ka o ghara ire ure?', 'ig', '/static/samples/ig_yam.mp3')">
+                    🍠 <b>Igbo</b><br>Yam Storage 🔊
                 </button>
-                <button class="sample-btn" onclick="sendSampleQuery('What is the best fertilizer timing for maize farming?', 'en')">
-                    🌱 <b>English</b><br>Fertilizer Timing
+                <button class="sample-btn" onclick="sendSampleQuery('What is the best fertilizer timing for maize farming?', 'en', '/static/samples/en_fertilizer.mp3')">
+                    🌱 <b>English</b><br>Fertilizer Timing 🔊
                 </button>
             </div>
         </div>
@@ -545,6 +551,26 @@
             }
         });
 
+        async function handleAudioUpload(input) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('audio', file, file.name);
+            formData.append('language', currentLang);
+            
+            showLoading(true);
+            try {
+                const response = await fetch('/api/chat', { method: 'POST', body: formData });
+                const data = await response.json();
+                displayResult(data);
+            } catch (err) {
+                alert('Audio upload processing failed: ' + err);
+            } finally {
+                showLoading(false);
+                input.value = '';
+            }
+        }
+
         function submitLiveQuestion() {
             const query = document.getElementById('liveTranscriptInput').value.trim();
             if (!query) {
@@ -554,7 +580,16 @@
             sendSampleQuery(query, currentLang);
         }
 
-        async function sendSampleQuery(textQuery, lang) {
+        async function sendSampleQuery(textQuery, lang, farmerVoiceUrl = null) {
+            if (farmerVoiceUrl) {
+                try {
+                    const audio = new Audio(farmerVoiceUrl);
+                    audio.play();
+                } catch(e) {}
+            }
+            document.getElementById('liveTranscriptInput').value = textQuery;
+            selectLang(lang, lang === 'ha' ? 'ha-NG' : (lang === 'yo' ? 'yo-NG' : (lang === 'ig' ? 'ig-NG' : 'en-NG')));
+            
             showLoading(true);
             try {
                 const response = await fetch('/api/chat-text', {

@@ -72,8 +72,13 @@ class ASRTranscriber:
             logger.warning("Falling back to a mock transcriber for local testing without HF token.")
             self.models = None
 
-    def transcribe_wav(self, wav_bytes: bytes, language: str = "en") -> dict:
-        """Transcribe WAV audio bytes using SpeechRecognition API with zero latency."""
+    def transcribe_any_audio(self, audio_bytes: bytes, language: str = "en") -> dict:
+        """Convert any audio format (WebM, OGG, MP3, WAV, M4A) via ffmpeg and transcribe with SpeechRecognition."""
+        import subprocess
+        import tempfile
+        import os
+        import io
+        
         lang = language[:2].lower()
         LANG_MAP = {
             "en": "en-NG",
@@ -83,29 +88,55 @@ class ASRTranscriber:
         }
         sr_lang = LANG_MAP.get(lang, "en-NG")
         
-        if self.sr_recognizer and len(wav_bytes) > 200:
-            import io
-            try:
-                with sr.AudioFile(io.BytesIO(wav_bytes)) as source:
+        if not self.sr_recognizer or len(audio_bytes) < 100:
+            return {"text": "", "language": lang, "error": "Audio buffer too short or empty."}
+
+        # 1. Try reading directly as WAV if possible
+        try:
+            with sr.AudioFile(io.BytesIO(audio_bytes)) as source:
+                audio_data = self.sr_recognizer.record(source)
+            text = self.sr_recognizer.recognize_google(audio_data, language=sr_lang)
+            if text and text.strip():
+                return {"text": text.strip(), "language": lang, "confidence": 0.95}
+        except Exception:
+            pass
+
+        # 2. Convert via ffmpeg to standard 16kHz PCM WAV
+        with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as f_in:
+            f_in.write(audio_bytes)
+            in_path = f_in.name
+        out_path = in_path + ".wav"
+
+        try:
+            cmd = ["ffmpeg", "-y", "-i", in_path, "-ar", "16000", "-ac", "1", out_path]
+            res = subprocess.run(cmd, capture_output=True)
+            if res.returncode == 0 and os.path.exists(out_path):
+                with sr.AudioFile(out_path) as source:
                     audio_data = self.sr_recognizer.record(source)
                 text = self.sr_recognizer.recognize_google(audio_data, language=sr_lang)
                 if text and text.strip():
-                    logger.info(f"Successfully transcribed audio ({lang}): {text}")
-                    return {
-                        "text": text.strip(),
-                        "language": lang,
-                        "confidence": 0.95
-                    }
-            except sr.UnknownValueError:
-                logger.warning(f"No clear speech recognized in {lang}")
-            except Exception as e:
-                logger.warning(f"Speech recognition error for {lang}: {e}")
-                
+                    logger.info(f"FFmpeg+SR transcribed audio ({lang}): {text}")
+                    return {"text": text.strip(), "language": lang, "confidence": 0.95}
+        except sr.UnknownValueError:
+            logger.warning(f"Google Speech API: no clear speech detected in {lang}")
+        except Exception as e:
+            logger.warning(f"Transcription error ({lang}): {e}")
+        finally:
+            if os.path.exists(in_path):
+                try: os.remove(in_path)
+                except Exception: pass
+            if os.path.exists(out_path):
+                try: os.remove(out_path)
+                except Exception: pass
+
         return {
             "text": "",
             "language": lang,
             "error": "No clear speech recognized."
         }
+
+    def transcribe_wav(self, wav_bytes: bytes, language: str = "en") -> dict:
+        return self.transcribe_any_audio(wav_bytes, language=language)
 
     def transcribe(self, audio_data: Any, sampling_rate: int = 16000) -> dict:
         if self.models is None:
