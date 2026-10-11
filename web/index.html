@@ -260,6 +260,15 @@
             <span class="lang-pill">Nigerian English (en)</span>
         </div>
 
+        <div id="endpointBar" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 12px; margin-bottom: 20px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="endpointStatusDot" style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block;"></span>
+                <span style="font-weight: 700; color: #166534;">Live GPU:</span>
+                <span id="endpointDisplay" style="color: #15803d; font-family: monospace; word-break: break-all;">Loading...</span>
+            </div>
+            <button onclick="changeEndpointPrompt()" style="background: white; border: 1px solid #86efac; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; color: #166534; font-weight: 600;">Change URL</button>
+        </div>
+
         <div class="record-container">
             <button id="recordBtn" class="record-btn" title="Tap to Speak">🎤</button>
             <div id="recordLabel" class="record-label">Tap to record question</div>
@@ -290,7 +299,10 @@
         <div id="outputCard" class="output-card">
             <div class="output-header">
                 <span style="font-weight: 700; font-size: 14px; color: var(--primary);">Advice Received</span>
-                <span id="detectedLang" class="lang-tag">HA</span>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <span id="sourceBadge" style="background: #e0f2fe; color: #0369a1; font-weight: 600; font-size: 11px; padding: 3px 8px; border-radius: 4px;">N-ATLAS GPU</span>
+                    <span id="detectedLang" class="lang-tag">HA</span>
+                </div>
             </div>
 
             <div class="output-section">
@@ -321,6 +333,45 @@
         const recordLabel = document.getElementById('recordLabel');
         const spinner = document.getElementById('spinner');
         const outputCard = document.getElementById('outputCard');
+
+        // Check backend GPU status on page load
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const display = document.getElementById('endpointDisplay');
+                const dot = document.getElementById('endpointStatusDot');
+                if (data.api_url) {
+                    display.textContent = data.api_url;
+                    dot.style.background = '#22c55e';
+                } else {
+                    display.textContent = 'Local RAG Mode (No remote GPU URL)';
+                    dot.style.background = '#eab308';
+                }
+            } catch (e) {
+                console.warn('Could not query status', e);
+            }
+        }
+        checkStatus();
+
+        async function changeEndpointPrompt() {
+            const current = document.getElementById('endpointDisplay').textContent;
+            const newUrl = prompt('Enter your live ngrok/Colab GPU URL (e.g. https://xxxx.ngrok-free.app):', current);
+            if (newUrl && newUrl.trim() !== '') {
+                try {
+                    const res = await fetch('/api/set-endpoint', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ api_url: newUrl.trim() })
+                    });
+                    const d = await res.json();
+                    alert('Endpoint updated to: ' + d.api_url);
+                    checkStatus();
+                } catch (e) {
+                    alert('Failed to update endpoint: ' + e);
+                }
+            }
+        }
 
         recordBtn.addEventListener('click', async () => {
             if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -394,6 +445,12 @@
             document.getElementById('transcriptText').textContent = data.transcript || 'No transcript generated.';
             document.getElementById('adviceText').textContent = data.advice || 'No advice generated.';
             document.getElementById('detectedLang').textContent = (data.language || 'EN').toUpperCase();
+            
+            const sourceBadge = document.getElementById('sourceBadge');
+            if (data.source) {
+                sourceBadge.textContent = data.source.includes('GPU') ? '⚡ Live N-ATLAS GPU' : '🌿 Sovereign RAG';
+                sourceBadge.title = data.source;
+            }
             
             const audioPlayer = document.getElementById('audioPlayer');
             const audioSection = document.getElementById('audioSection');

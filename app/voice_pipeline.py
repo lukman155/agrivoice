@@ -48,6 +48,7 @@ class VoicePipeline:
             "transcript": text,
             "language": detected_lang,
             "advice": advice_text,
+            "source": getattr(self.advisor, "last_source", "N-ATLAS Sovereign Engine"),
             "audio_url": f"/{audio_path}" if audio_path else None
         }
 
@@ -67,5 +68,6 @@ class VoicePipeline:
             "transcript": text,
             "language": language,
             "advice": advice_text,
+            "source": getattr(self.advisor, "last_source", "N-ATLAS Sovereign Engine"),
             "audio_url": f"/{audio_path}" if audio_path else None
         }

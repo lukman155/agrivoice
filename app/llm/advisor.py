@@ -42,13 +42,13 @@ class AgriculturalAdvisor:
         base_url = (settings.natlas_api_url or "").rstrip('/')
         lang = language[:2].lower()
         
-        # Only attempt remote GPU call if a real public GPU tunnel (ngrok/colab/kaggle) is active
-        is_remote_gpu = bool(base_url and any(h in base_url for h in ["ngrok", "colab", "kaggle", "runpod"]))
+        # Check if an active remote GPU or API endpoint is configured
+        is_remote_gpu = bool(base_url and any(h in base_url for h in ["ngrok", "colab", "kaggle", "runpod", "http"]))
         if is_remote_gpu:
             url = f"{base_url}/v1/chat/completions" if not base_url.endswith("/v1") else f"{base_url}/chat/completions"
             system = SYSTEM_PROMPTS.get(lang, SYSTEM_PROMPTS["en"])
             if context:
-                system += f"\n\nUse this agricultural knowledge to answer concisely (under 70 words):\n{context}"
+                system += f"\n\nUse this agricultural knowledge to answer concisely (under 75 words):\n{context}"
             
             data = {
                 "model": "NCAIR1/N-ATLaS",
@@ -61,16 +61,21 @@ class AgriculturalAdvisor:
             try:
                 headers = {
                     "Content-Type": "application/json",
-                    "ngrok-skip-browser-warning": "1"
+                    "ngrok-skip-browser-warning": "1",
+                    "User-Agent": "AgriVoice-Sovereign/1.0"
                 }
-                response = requests.post(url, json=data, headers=headers, timeout=5, verify=False)
+                logger.info(f"Dispatching query to live N-ATLAS GPU: {url}")
+                response = requests.post(url, json=data, headers=headers, timeout=30, verify=False)
                 if response.status_code == 200:
                     content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content and "[API Backend Error" not in content and "[Inference error" not in content:
+                        self.last_source = f"Live N-ATLAS 8B GPU ({base_url})"
+                        logger.info("Successfully received live response from N-ATLAS GPU.")
                         return content
             except Exception as e:
-                logger.warning(f"Remote GPU API unavailable ({e}). Using grounded sovereign RAG advisor.")
+                logger.warning(f"Remote GPU API unavailable ({e}). Using grounded sovereign RAG advisor fallback.")
 
+        self.last_source = "Grounded Sovereign Extension RAG (Fallback)"
         return self._synthesize_grounded_advice(query, context, lang)
 
     def _synthesize_grounded_advice(self, query: str, context: str, lang: str) -> str:

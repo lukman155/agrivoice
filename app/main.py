@@ -76,6 +76,28 @@ async def chat_text(req: TextChatRequest):
     result = pipeline.process_text(req.query, req.language)
     return result
 
+class SetEndpointRequest(BaseModel):
+    api_url: str
+
+@app.get("/api/status")
+def get_status():
+    from app.config import settings
+    return {
+        "status": "online",
+        "api_url": settings.natlas_api_url,
+        "backend": settings.llm_backend,
+        "is_gpu_connected": bool(settings.natlas_api_url and "ngrok" in settings.natlas_api_url)
+    }
+
+@app.post("/api/set-endpoint")
+def set_endpoint(req: SetEndpointRequest):
+    from app.config import settings
+    new_url = req.api_url.strip().rstrip('/')
+    settings.natlas_api_url = new_url
+    os.environ["NATLAS_API_URL"] = new_url
+    logger.info(f"Updated live GPU endpoint to: {new_url}")
+    return {"status": "updated", "api_url": new_url}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
