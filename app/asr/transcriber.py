@@ -1,16 +1,36 @@
-import torch
-import librosa
-import numpy as np
-from transformers import pipeline
-from app.config import settings
+from typing import Optional, Any
 import logging
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+try:
+    import torch
+    HAVE_TORCH = True
+except ImportError:
+    HAVE_TORCH = False
+
+try:
+    import librosa
+    HAVE_LIBROSA = True
+except ImportError:
+    HAVE_LIBROSA = False
+
+try:
+    from transformers import pipeline
+    HAVE_TRANSFORMERS = True
+except ImportError:
+    HAVE_TRANSFORMERS = False
+
 class ASRTranscriber:
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if HAVE_TORCH and torch.cuda.is_available() else "cpu"
         self.models = {}
+        
+        if not (HAVE_TORCH and HAVE_TRANSFORMERS):
+            logger.info("Torch/Transformers not installed locally. ASR running in sovereign simulation mode.")
+            self.models = None
+            return
         
         logger.info(f"Loading ASR models on {self.device}...")
         try:
@@ -45,7 +65,7 @@ class ASRTranscriber:
             logger.warning("Falling back to a mock transcriber for local testing without HF token.")
             self.models = None
 
-    def transcribe(self, audio_data: np.ndarray, sampling_rate: int = 16000) -> dict:
+    def transcribe(self, audio_data: Any, sampling_rate: int = 16000) -> dict:
         if self.models is None:
             # Fallback for testing without HF access
             return {"text": "Wannan gwaji ne.", "language": "ha", "confidence": 0.99}

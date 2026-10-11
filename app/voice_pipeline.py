@@ -50,3 +50,22 @@ class VoicePipeline:
             "advice": advice_text,
             "audio_url": f"/{audio_path}" if audio_path else None
         }
+
+    def process_text(self, text: str, language: str = "ha") -> dict:
+        """
+        Process text query directly (sample queries or typed questions): RAG -> LLM -> TTS
+        """
+        logger.info(f"Starting text pipeline for ({language}): {text}")
+        context = self.retriever.retrieve(text)
+        advice_text = self.advisor.get_advice(query=text, context=context, language=language)
+        
+        output_filename = f"static/outputs/response_{uuid.uuid4().hex}.mp3"
+        os.makedirs("static/outputs", exist_ok=True)
+        audio_path = self.speaker.synthesize(advice_text, language, output_filename)
+        
+        return {
+            "transcript": text,
+            "language": language,
+            "advice": advice_text,
+            "audio_url": f"/{audio_path}" if audio_path else None
+        }

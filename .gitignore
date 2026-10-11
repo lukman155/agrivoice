@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 data/knowledge/faiss_index.bin
 data/knowledge/texts.pkl
+*.mp3
+static/outputs/*.mp3
+!static/outputs/.gitkeep

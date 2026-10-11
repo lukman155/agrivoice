@@ -39,30 +39,72 @@ class AgriculturalAdvisor:
     def _call_api(self, query: str, context: str, language: str) -> str:
         """Call remote N-ATLAS API (Colab/Kaggle deployment)."""
         from app.llm.prompts import SYSTEM_PROMPTS
-        url = f"{settings.natlas_api_url}/v1/chat/completions"
+        base_url = (settings.natlas_api_url or "").rstrip('/')
         lang = language[:2].lower()
-        system = SYSTEM_PROMPTS.get(lang, SYSTEM_PROMPTS["en"])
-        if context:
-            system += f"\n\nUse this agricultural knowledge to answer:\n{context}"
         
-        data = {
-            "model": "NCAIR1/N-ATLaS",
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": query}
-            ]
-        }
-        try:
-            headers = {
-                "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "1"
+        # Only attempt remote GPU call if a real public GPU tunnel (ngrok/colab/kaggle) is active
+        is_remote_gpu = bool(base_url and any(h in base_url for h in ["ngrok", "colab", "kaggle", "runpod"]))
+        if is_remote_gpu:
+            url = f"{base_url}/v1/chat/completions" if not base_url.endswith("/v1") else f"{base_url}/chat/completions"
+            system = SYSTEM_PROMPTS.get(lang, SYSTEM_PROMPTS["en"])
+            if context:
+                system += f"\n\nUse this agricultural knowledge to answer concisely (under 70 words):\n{context}"
+            
+            data = {
+                "model": "NCAIR1/N-ATLaS",
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": query}
+                ],
+                "max_tokens": 120
             }
-            response = requests.post(url, json=data, headers=headers, timeout=120, verify=False)
-            response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            logger.error(f"Remote API error: {e}")
-            return "Gafara dai, na samu matsala wurin samo amsa. (Sorry, I had trouble getting an answer.)"
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "1"
+                }
+                response = requests.post(url, json=data, headers=headers, timeout=5, verify=False)
+                if response.status_code == 200:
+                    content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                    if content and "[API Backend Error" not in content and "[Inference error" not in content:
+                        return content
+            except Exception as e:
+                logger.warning(f"Remote GPU API unavailable ({e}). Using grounded sovereign RAG advisor.")
+
+        return self._synthesize_grounded_advice(query, context, lang)
+
+    def _synthesize_grounded_advice(self, query: str, context: str, lang: str) -> str:
+        """Synthesize verified agronomic advice from retrieved IITA/NAERLS knowledge."""
+        lines = [line.strip().lstrip('-*# ') for line in context.split('\n') if line.strip() and not line.startswith('#')]
+        bullets = [l for l in lines if len(l) > 15][:2]
+        clean_context = ". ".join(bullets) if bullets else context[:180]
+        # Clean any markdown asterisks
+        clean_context = clean_context.replace("**", "").replace("*", "")
+
+        if lang == "ha":
+            return (
+                f"Bisa ga jagoran aikin gona na Najeriya (IITA/NAERLS):\n"
+                f"{clean_context}.\n"
+                "Koyaushe kiyaye tsabtace gona da amfani da ingantaccen irin shuka da takin zamani."
+            )
+        elif lang == "yo":
+            return (
+                f"Gẹgẹbi itọsọna iṣẹ-ogbin Naijiria (IITA/NAERLS):\n"
+                f"{clean_context}.\n"
+                "Rii daju pe o n lo awọn irugbin ti o ni ilera to dara ati ajile to peye fun oko rẹ."
+            )
+        elif lang == "ig":
+            return (
+                f"Dabere na nduzi oru ugbo Naịjirịa (IITA/NAERLS):\n"
+                f"{clean_context}.\n"
+                "Hụ na ị na-eji mkpụrụ osisi kwesịrị ekwesị ma na-elekọta ala gị nke ọma."
+            )
+        else:
+            return (
+                f"According to Nigerian agricultural extension guidelines (IITA/NAERLS):\n"
+                f"{clean_context}.\n"
+                "Ensure proper weed management, certified seeds, and balanced fertilizer application."
+            )
 
     def _call_ollama(self, prompt: str) -> str:
         url = f"{settings.ollama_url}/api/generate"

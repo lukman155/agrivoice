@@ -368,20 +368,12 @@
         async function sendSampleQuery(textQuery, lang) {
             showLoading(true);
             try {
-                // Synthesize a dummy audio waveform using Web Audio API to send to the backend
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
-                const wavBlob = new Blob([new Uint8Array(44)], { type: 'audio/wav' });
-                
-                const formData = new FormData();
-                formData.append('audio', wavBlob, 'sample.wav');
-                
-                const response = await fetch('/api/chat', { method: 'POST', body: formData });
+                const response = await fetch('/api/chat-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: textQuery, language: lang })
+                });
                 const data = await response.json();
-                
-                // For sample simulation if mock
-                data.transcript = textQuery;
-                data.language = lang;
                 displayResult(data);
             } catch (err) {
                 alert('Request failed: ' + err);
